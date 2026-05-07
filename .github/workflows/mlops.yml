@@ -6,6 +6,7 @@ on:
     paths:
       - 'data/**.dvc'
       - 'src/**.py'
+      - 'tests/**.py'
       - 'params.yaml'
   workflow_dispatch:
 
@@ -112,12 +113,12 @@ jobs:
             # Cấu hình môi trường trên VM nếu chưa có
             sudo apt update && sudo apt install -y python3-pip
             pip3 install fastapi uvicorn scikit-learn joblib google.cloud-storage
-            
+
             mkdir -p ~/models ~/src
-            
+
             # Ghi file credentials lên VM
             echo '${{ secrets.CLOUD_CREDENTIALS }}' > ~/sa-key.json
-            
+
             # Tạo service systemd
             sudo tee /etc/systemd/system/mlops-serve.service > /dev/null <<EOF
             [Unit]
@@ -133,10 +134,10 @@ jobs:
             [Install]
             WantedBy=multi-user.target
             EOF
-            
+
             sudo systemctl daemon-reload
             sudo systemctl enable mlops-serve
-            
+
       - name: Upload serve.py
         uses: appleboy/scp-action@v0.1.7
         with:
