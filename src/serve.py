@@ -3,83 +3,73 @@ from pydantic import BaseModel
 from google.cloud import storage
 import joblib
 import os
+import uvicorn
 
 app = FastAPI()
 
-GCS_BUCKET = os.environ["GCS_BUCKET"]
+# Đọc tên bucket từ biến môi trường
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "your-bucket-name")
 GCS_MODEL_KEY = "models/latest/model.pkl"
 MODEL_PATH = os.path.expanduser("~/models/model.pkl")
 
-
 def download_model():
-    """
-    Tai file model.pkl tu GCS ve may khi server khoi dong.
+    """Tải file model.pkl từ GCS về máy khi server khởi động."""
+    if not os.path.exists(os.path.expanduser("~/models")):
+        os.makedirs(os.path.expanduser("~/models"))
+        
+    print(f"Downloading model from gs://{GCS_BUCKET}/{GCS_MODEL_KEY}...")
+    try:
+        client = storage.Client()
+        bucket = client.bucket(GCS_BUCKET)
+        blob = bucket.blob(GCS_MODEL_KEY)
+        blob.download_to_filename(MODEL_PATH)
+        print(f"Model downloaded successfully to {MODEL_PATH}")
+    except Exception as e:
+        print(f"Error downloading model: {e}")
+        # Nếu không tải được (ví dụ lần đầu chưa có model), chúng ta vẫn tiếp tục 
+        # nhưng model load sẽ lỗi sau đó.
 
-    Ham nay duoc goi mot lan khi module duoc import. Su dung
-    GOOGLE_APPLICATION_CREDENTIALS de xac thuc (duoc dat trong systemd service).
-    """
-    # TODO 1: Tao storage.Client()
-    # client = storage.Client()
+# Tải model khi khởi động (chỉ chạy khi deploy thực tế trên VM)
+if os.environ.get("DEPLOYMENT_ENV") == "production":
+    download_model()
 
-    # TODO 2: Lay bucket va blob tuong ung
-    # bucket = client.bucket(GCS_BUCKET)
-    # blob   = bucket.blob(GCS_MODEL_KEY)
-
-    # TODO 3: Tai file model xuong may
-    # blob.download_to_filename(MODEL_PATH)
-
-    # TODO 4: In thong bao thanh cong
-    # print("Model da duoc tai xuong tu GCS.")
-
-    pass  # xoa dong nay sau khi hoan thanh tat ca TODO ben tren
-
-
-download_model()
-model = joblib.load(MODEL_PATH)
-
+# Load model nếu file tồn tại
+if os.path.exists(MODEL_PATH):
+    model = joblib.load(MODEL_PATH)
+else:
+    model = None
+    print("Warning: Model file not found. API will return errors for /predict.")
 
 class PredictRequest(BaseModel):
     features: list[float]
 
-
 @app.get("/health")
 def health():
-    """
-    Endpoint kiem tra suc khoe server.
-    GitHub Actions goi endpoint nay sau khi deploy de xac nhan server dang chay.
-
-    Tra ve: {"status": "ok"}
-    """
-    # TODO 5: Tra ve dict {"status": "ok"}
-    pass  # xoa dong nay sau khi hoan thanh
-
+    """Endpoint kiểm tra sức khỏe server."""
+    return {"status": "ok"}
 
 @app.post("/predict")
 def predict(req: PredictRequest):
     """
-    Endpoint suy luan chinh.
-
-    Dau vao : JSON {"features": [f1, f2, ..., f12]}
-    Dau ra  : JSON {"prediction": <0|1|2>, "label": <"thap"|"trung_binh"|"cao">}
-
-    Thu tu 12 dac trung (khop voi thu tu trong FEATURE_NAMES cua test):
-        fixed_acidity, volatile_acidity, citric_acid, residual_sugar,
-        chlorides, free_sulfur_dioxide, total_sulfur_dioxide, density,
-        pH, sulphates, alcohol, wine_type
+    Endpoint suy luận.
+    Đầu vào: JSON {"features": [f1, f2, ..., f12]}
     """
-    # TODO 6: Kiem tra so luong dac trung.
-    # Neu len(req.features) != 12, raise HTTPException(status_code=400, ...)
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+        
+    if len(req.features) != 12:
+        raise HTTPException(status_code=400, detail="Expected 12 features (wine quality)")
 
-    # TODO 7: Goi model.predict([req.features]) de lay ket qua du doan.
-    # pred = model.predict(...)
-
-    # TODO 8: Tra ve dict chua "prediction" (int) va "label" (string).
-    # Nhan tuong ung: 0 -> "thap", 1 -> "trung_binh", 2 -> "cao"
-    # return {"prediction": ..., "label": ...}
-
-    pass  # xoa dong nay sau khi hoan thanh tat ca TODO ben tren
-
+    # Dự đoán
+    prediction = int(model.predict([req.features])[0])
+    
+    # Nhãn: 0 -> "thấp", 1 -> "trung bình", 2 -> "cao"
+    labels = {0: "thấp", 1: "trung bình", 2: "cao"}
+    
+    return {
+        "prediction": prediction,
+        "label": labels.get(prediction, "unknown")
+    }
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
