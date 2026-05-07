@@ -3,7 +3,12 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
+import mlflow
 from src.train import train
+
+# Thiết lập MLflow tracking cho môi trường test
+os.environ["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow_test.db"
+os.environ["MLFLOW_ARTIFACT_ROOT"] = "./mlartifacts_test"
 
 FEATURE_NAMES = [
     "fixed_acidity", "volatile_acidity", "citric_acid", "residual_sugar",
