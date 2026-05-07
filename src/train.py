@@ -28,6 +28,14 @@ def train(
         accuracy (float): độ chính xác trên tập đánh giá
     """
 
+    # Thiết lập MLflow tracking URI nếu chưa được set trong env
+    if not os.environ.get("MLFLOW_TRACKING_URI"):
+        mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    
+    # Đảm bảo đường dẫn lưu trữ artifact là tương đối
+    if not os.environ.get("MLFLOW_ARTIFACT_ROOT"):
+        os.environ["MLFLOW_ARTIFACT_ROOT"] = "./mlartifacts"
+
     # 1.5.1: Đọc dữ liệu huấn luyện và đánh giá
     df_train = pd.read_csv(data_path)
     df_eval = pd.read_csv(eval_path)
