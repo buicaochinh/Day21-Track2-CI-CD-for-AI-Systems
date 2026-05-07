@@ -12,5 +12,8 @@ mlops_deploy.pub
 .env
 .venv/
 __pycache__/
+.dvc/cache/
+.dvc/tmp/
+*.log
 *.pyc
 .DS_Store
