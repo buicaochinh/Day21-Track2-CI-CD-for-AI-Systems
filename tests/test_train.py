@@ -1,12 +1,8 @@
 import os
-# Thiết lập MLflow tracking cho môi trường test TRƯỚC khi import mlflow
-os.environ["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow_test.db"
-os.environ["MLFLOW_ARTIFACT_ROOT"] = "./mlartifacts_test"
-
-import pytest
-import mlflow
+import json
 import numpy as np
 import pandas as pd
+import pytest
 from src.train import train
 
 FEATURE_NAMES = [
@@ -36,10 +32,12 @@ def _make_temp_data(tmp_path):
 def test_train_returns_float(tmp_path):
     """Kiểm tra hàm train() trả về một số thực trong khoảng [0, 1]."""
     train_path, eval_path = _make_temp_data(tmp_path)
+    # Tắt MLflow trong lúc test
     acc = train(
         {"n_estimators": 10, "max_depth": 3, "min_samples_split": 2},
         data_path=train_path,
-        eval_path=eval_path
+        eval_path=eval_path,
+        use_mlflow=False
     )
     assert isinstance(acc, float)
     assert 0.0 <= acc <= 1.0
@@ -48,10 +46,12 @@ def test_train_returns_float(tmp_path):
 def test_metrics_file_created(tmp_path):
     """Kiểm tra file outputs/metrics.json được tạo sau khi huấn luyện."""
     train_path, eval_path = _make_temp_data(tmp_path)
+    # Tắt MLflow trong lúc test
     train(
         {"n_estimators": 10, "max_depth": 3, "min_samples_split": 2},
         data_path=train_path,
         eval_path=eval_path,
+        use_mlflow=False
     )
     assert os.path.exists("outputs/metrics.json")
     with open("outputs/metrics.json", "r") as f:
@@ -63,11 +63,11 @@ def test_metrics_file_created(tmp_path):
 def test_model_file_created(tmp_path):
     """Kiểm tra file models/model.pkl được tạo sau khi huấn luyện."""
     train_path, eval_path = _make_temp_data(tmp_path)
+    # Tắt MLflow trong lúc test
     train(
         {"n_estimators": 10, "max_depth": 3, "min_samples_split": 2},
         data_path=train_path,
         eval_path=eval_path,
+        use_mlflow=False
     )
     assert os.path.exists("models/model.pkl")
-
-import json # Import json cho test_metrics_file_created
