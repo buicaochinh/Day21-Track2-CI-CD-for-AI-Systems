@@ -3,36 +3,26 @@ name: MLOps Pipeline
 on:
   push:
     branches: [main, master]
-    paths:
-      - 'data/**.dvc'
-      - 'src/**.py'
-      - 'tests/**.py'
-      - 'params.yaml'
   workflow_dispatch:
 
 jobs:
-  # JOB 1: Chạy unit tests
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           pip install pytest
-
       - name: Run tests
         env:
           MLFLOW_TRACKING_URI: sqlite:///mlflow_test.db
         run: pytest tests/ -v
 
-  # JOB 2: Huấn luyện mô hình
   train:
     name: Train
     needs: test
@@ -41,35 +31,28 @@ jobs:
       accuracy: ${{ steps.read_metrics.outputs.accuracy }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
       - name: Authenticate to GCP
         run: |
           echo '${{ secrets.CLOUD_CREDENTIALS }}' > sa-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/sa-key.json" >> $GITHUB_ENV
-
       - name: Pull data with DVC
         run: |
           dvc remote modify myremote credentialpath sa-key.json
           dvc pull
-
       - name: Train model
         run: |
           export MLFLOW_TRACKING_URI=sqlite:///mlflow.db
           python src/train.py
-
       - name: Read metrics
         id: read_metrics
         run: |
           ACC=$(python -c "import json; print(json.load(open('outputs/metrics.json'))['accuracy'])")
           echo "accuracy=$ACC" >> $GITHUB_OUTPUT
-
       - name: Upload model to GCS
         run: |
           python - <<'EOF'
@@ -81,14 +64,12 @@ jobs:
           blob.upload_from_filename('models/model.pkl')
           print("Model uploaded to GCS")
           EOF
-
       - name: Save metrics as artifact
         uses: actions/upload-artifact@v4
         with:
           name: metrics
           path: outputs/metrics.json
 
-  # JOB 3: Kiểm tra chất lượng (Eval Gate)
   eval:
     name: Eval
     needs: train
@@ -98,7 +79,6 @@ jobs:
         run: |
           python -c "acc = float('${{ needs.train.outputs.accuracy }}'); print(f'Accuracy: {acc}'); exit(0 if acc >= 0.70 else 1)"
 
-  # JOB 4: Triển khai lên VM
   deploy:
     name: Deploy
     needs: eval
@@ -110,16 +90,10 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # Cấu hình môi trường trên VM nếu chưa có
             sudo apt update && sudo apt install -y python3-pip
             pip3 install fastapi uvicorn scikit-learn joblib google.cloud-storage
-
             mkdir -p ~/models ~/src
-
-            # Ghi file credentials lên VM
             echo '${{ secrets.CLOUD_CREDENTIALS }}' > ~/sa-key.json
-
-            # Tạo service systemd
             sudo tee /etc/systemd/system/mlops-serve.service > /dev/null <<EOF
             [Unit]
             After=network.target
@@ -134,10 +108,8 @@ jobs:
             [Install]
             WantedBy=multi-user.target
             EOF
-
             sudo systemctl daemon-reload
             sudo systemctl enable mlops-serve
-
       - name: Upload serve.py
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -146,7 +118,6 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           source: "src/serve.py"
           target: "/home/${{ secrets.VM_USER }}/"
-
       - name: Finalize Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
